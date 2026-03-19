@@ -339,6 +339,12 @@
                 return category;
             }
 
+            function clearPresetCategories() {
+                document.querySelectorAll('.category').forEach(el => {
+                    if (el.id !== 'uploaded-category') el.remove();
+                });
+            }
+
             function ensureEmptyTip() {
                 if (emptyTipEl) return emptyTipEl;
                 emptyTipEl = document.createElement('div');
@@ -357,6 +363,13 @@
                 return emptyTipEl;
             }
 
+            function getSongInitial(name) {
+                const firstChar = (name || '').trim().charAt(0);
+                if (!firstChar) return '#';
+                if (/[A-Za-z]/.test(firstChar)) return firstChar.toUpperCase();
+                return '#';
+            }
+
             function getUploadedSongPageUrl(song) {
                 if (!song || !song.id) return '';
                 if (uploadedPageUrlMap.has(song.id)) return uploadedPageUrlMap.get(song.id);
@@ -367,58 +380,60 @@
                 return url;
             }
 
-            async function hasAvailablePresetSongs() {
-                const sample = document.querySelector('.category .song-item a[href^="pages/"]');
-                if (!sample) return false;
-                const href = sample.getAttribute('href');
-                if (!href) return false;
-                try {
-                    const headResp = await fetch(href, { method: 'HEAD', cache: 'no-store' });
-                    if (headResp.ok) return true;
-                } catch (e) {}
-                try {
-                    const getResp = await fetch(href, { method: 'GET', cache: 'no-store' });
-                    return getResp.ok;
-                } catch (e) {
-                    return false;
-                }
-            }
-
-            function setPresetCategoryVisibility(visible) {
-                const categories = Array.from(document.querySelectorAll('.category')).filter(el => el.id !== 'uploaded-category');
-                categories.forEach(el => {
-                    el.style.display = visible ? '' : 'none';
-                });
-            }
-
             function renderUploadedSongs() {
                 const category = ensureUploadedCategory();
-                const listEl = category.querySelector('#uploaded-list');
-                listEl.innerHTML = '';
+                category.innerHTML = '';
                 if (uploadedSongs.length === 0) {
                     category.style.display = 'none';
+                    const tip = ensureEmptyTip();
+                    tip.style.display = '';
                     return;
                 }
                 category.style.display = '';
-                uploadedSongs.forEach((song, idx) => {
-                    const li = document.createElement('li');
-                    li.className = 'song-item';
-                    const link = document.createElement('a');
-                    link.href = getUploadedSongPageUrl(song);
-                    link.target = '_blank';
-                    link.rel = 'noopener noreferrer';
-                    link.dataset.directOpen = '1';
-                    link.textContent = `${idx + 1}. ${song.name}`;
-                    const addBtn = document.createElement('span');
-                    addBtn.className = 'add-to-presentation';
-                    addBtn.title = '加入演示';
-                    addBtn.setAttribute('aria-label', '加入演示');
-                    addBtn.dataset.songName = song.name;
-                    addBtn.dataset.songFile = `local:${song.id}`;
-                    addBtn.textContent = '＋';
-                    li.appendChild(link);
-                    li.appendChild(addBtn);
-                    listEl.appendChild(li);
+                const tip = ensureEmptyTip();
+                tip.style.display = 'none';
+                const grouped = new Map();
+                const sortedSongs = [...uploadedSongs].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+                sortedSongs.forEach(song => {
+                    const initial = getSongInitial(song.name);
+                    if (!grouped.has(initial)) grouped.set(initial, []);
+                    grouped.get(initial).push(song);
+                });
+                const orderedInitials = Array.from(grouped.keys()).sort((a, b) => {
+                    if (a === '#') return 1;
+                    if (b === '#') return -1;
+                    return a.localeCompare(b);
+                });
+                orderedInitials.forEach(initial => {
+                    const section = document.createElement('div');
+                    section.className = 'category';
+                    const title = document.createElement('h2');
+                    title.textContent = initial;
+                    const listEl = document.createElement('ul');
+                    listEl.className = 'song-list';
+                    grouped.get(initial).forEach((song, idx) => {
+                        const li = document.createElement('li');
+                        li.className = 'song-item';
+                        const link = document.createElement('a');
+                        link.href = getUploadedSongPageUrl(song);
+                        link.target = '_blank';
+                        link.rel = 'noopener noreferrer';
+                        link.dataset.directOpen = '1';
+                        link.textContent = `${idx + 1}. ${song.name}`;
+                        const addBtn = document.createElement('span');
+                        addBtn.className = 'add-to-presentation';
+                        addBtn.title = '加入演示';
+                        addBtn.setAttribute('aria-label', '加入演示');
+                        addBtn.dataset.songName = song.name;
+                        addBtn.dataset.songFile = `local:${song.id}`;
+                        addBtn.textContent = '＋';
+                        li.appendChild(link);
+                        li.appendChild(addBtn);
+                        listEl.appendChild(li);
+                    });
+                    section.appendChild(title);
+                    section.appendChild(listEl);
+                    category.appendChild(section);
                 });
                 refreshLinkStates();
             }
@@ -810,24 +825,10 @@ updateSong();
             }
 
             loadUploadedSongs();
+            clearPresetCategories();
             renderUploadedSongs();
             renderPanelList();
             refreshLinkStates();
-            hasAvailablePresetSongs().then(hasPreset => {
-                if (hasPreset) {
-                    setPresetCategoryVisibility(true);
-                    if (emptyTipEl) emptyTipEl.style.display = 'none';
-                } else {
-                    setPresetCategoryVisibility(false);
-                    if (uploadedSongs.length > 0) {
-                        const tip = ensureEmptyTip();
-                        tip.style.display = 'none';
-                    } else {
-                        const tip = ensureEmptyTip();
-                        tip.style.display = '';
-                    }
-                }
-            });
 
             if (uploadButton && uploadInput) {
                 uploadButton.addEventListener('click', async () => {
