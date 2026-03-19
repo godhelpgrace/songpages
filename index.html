@@ -278,6 +278,8 @@
             const uploadButton = document.getElementById('song-upload-button');
             const uploadStatus = document.getElementById('song-upload-status');
             const uploadPanel = document.getElementById('upload-panel');
+            const uploadedPageUrlMap = new Map();
+            let emptyTipEl = null;
 
             const panel = document.getElementById('presentation-panel');
             const imageDir = panel.getAttribute('data-image-dir') || '';
@@ -305,6 +307,13 @@
                 uploadedSongs = list;
                 uploadedMap = new Map(uploadedSongs.map(s => [s.id, s]));
                 localStorage.setItem(uploadStorageKey, JSON.stringify(uploadedSongs));
+                const keepIds = new Set(uploadedSongs.map(s => s.id));
+                Array.from(uploadedPageUrlMap.keys()).forEach(id => {
+                    if (!keepIds.has(id)) {
+                        URL.revokeObjectURL(uploadedPageUrlMap.get(id));
+                        uploadedPageUrlMap.delete(id);
+                    }
+                });
             }
 
             function normalizeSongName(name) {
@@ -330,6 +339,58 @@
                 return category;
             }
 
+            function ensureEmptyTip() {
+                if (emptyTipEl) return emptyTipEl;
+                emptyTipEl = document.createElement('div');
+                emptyTipEl.id = 'empty-song-tip';
+                emptyTipEl.style.maxWidth = '760px';
+                emptyTipEl.style.margin = '0 auto 16px';
+                emptyTipEl.style.padding = '10px 12px';
+                emptyTipEl.style.borderRadius = '10px';
+                emptyTipEl.style.background = 'rgba(255,255,255,0.9)';
+                emptyTipEl.style.border = '1px solid rgba(0,0,0,0.08)';
+                emptyTipEl.style.color = '#444';
+                emptyTipEl.textContent = '当前云端目录暂无预置歌谱，请先上传歌谱图片，系统会自动生成可点击的歌谱链接。';
+                if (uploadPanel && uploadPanel.parentNode) {
+                    uploadPanel.parentNode.insertBefore(emptyTipEl, uploadPanel.nextSibling);
+                }
+                return emptyTipEl;
+            }
+
+            function getUploadedSongPageUrl(song) {
+                if (!song || !song.id) return '';
+                if (uploadedPageUrlMap.has(song.id)) return uploadedPageUrlMap.get(song.id);
+                const html = song.pageHtml || buildSongViewerHtml(song.name, song.dataUrl);
+                const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                uploadedPageUrlMap.set(song.id, url);
+                return url;
+            }
+
+            async function hasAvailablePresetSongs() {
+                const sample = document.querySelector('.category .song-item a[href^="pages/"]');
+                if (!sample) return false;
+                const href = sample.getAttribute('href');
+                if (!href) return false;
+                try {
+                    const headResp = await fetch(href, { method: 'HEAD', cache: 'no-store' });
+                    if (headResp.ok) return true;
+                } catch (e) {}
+                try {
+                    const getResp = await fetch(href, { method: 'GET', cache: 'no-store' });
+                    return getResp.ok;
+                } catch (e) {
+                    return false;
+                }
+            }
+
+            function setPresetCategoryVisibility(visible) {
+                const categories = Array.from(document.querySelectorAll('.category')).filter(el => el.id !== 'uploaded-category');
+                categories.forEach(el => {
+                    el.style.display = visible ? '' : 'none';
+                });
+            }
+
             function renderUploadedSongs() {
                 const category = ensureUploadedCategory();
                 const listEl = category.querySelector('#uploaded-list');
@@ -343,7 +404,10 @@
                     const li = document.createElement('li');
                     li.className = 'song-item';
                     const link = document.createElement('a');
-                    link.href = '#';
+                    link.href = getUploadedSongPageUrl(song);
+                    link.target = '_blank';
+                    link.rel = 'noopener noreferrer';
+                    link.dataset.directOpen = '1';
                     link.textContent = `${idx + 1}. ${song.name}`;
                     const addBtn = document.createElement('span');
                     addBtn.className = 'add-to-presentation';
@@ -372,7 +436,8 @@
                 const dataUrl = await readFileAsDataUrl(file);
                 const id = `u_${Date.now()}_${Math.random().toString(16).slice(2)}`;
                 const name = normalizeSongName(file.name);
-                const entry = { id, name, fileName: file.name, dataUrl };
+                const pageHtml = buildSongViewerHtml(name, dataUrl);
+                const entry = { id, name, fileName: file.name, dataUrl, pageHtml };
                 saveUploadedSongs([...uploadedSongs, entry]);
                 renderUploadedSongs();
             }
@@ -748,6 +813,21 @@ updateSong();
             renderUploadedSongs();
             renderPanelList();
             refreshLinkStates();
+            hasAvailablePresetSongs().then(hasPreset => {
+                if (hasPreset) {
+                    setPresetCategoryVisibility(true);
+                    if (emptyTipEl) emptyTipEl.style.display = 'none';
+                } else {
+                    setPresetCategoryVisibility(false);
+                    if (uploadedSongs.length > 0) {
+                        const tip = ensureEmptyTip();
+                        tip.style.display = 'none';
+                    } else {
+                        const tip = ensureEmptyTip();
+                        tip.style.display = '';
+                    }
+                }
+            });
 
             if (uploadButton && uploadInput) {
                 uploadButton.addEventListener('click', async () => {
@@ -763,6 +843,7 @@ updateSong();
                             await addUploadedSong(file);
                         }
                         setUploadStatus('上传完成', false);
+                        if (emptyTipEl) emptyTipEl.style.display = 'none';
                         uploadInput.value = '';
                     } catch (e) {
                         setUploadStatus(e?.message || '上传失败', true);
@@ -787,6 +868,7 @@ updateSong();
                 }
                 const link = e.target.closest('.song-item a');
                 if (link) {
+                    if (link.dataset.directOpen === '1') return;
                     e.preventDefault();
                     const item = link.closest('.song-item');
                     const addEl = item ? item.querySelector('.add-to-presentation') : null;
