@@ -807,8 +807,10 @@ def generate_html_index(directory, output_file):
     
     output_dir = os.path.dirname(output_file)
     pages_dir = os.path.join(output_dir, 'pages')
-    if not os.path.exists(pages_dir):
-        os.makedirs(pages_dir)
+    if os.path.exists(pages_dir):
+        import shutil
+        shutil.rmtree(pages_dir)
+    os.makedirs(pages_dir)
 
     generate_presentation_page(pages_dir)
     # 计算相对目录并规范为 URL 路径（Windows 下避免反斜杠）
@@ -1022,49 +1024,10 @@ def generate_html_index(directory, output_file):
             transform: translateY(-1px);
             box-shadow: 0 14px 26px rgba(5,115,255,0.35);
         }
-        #upload-panel {
-            margin: 0 auto 18px;
-            max-width: 760px;
-            background: rgba(255,255,255,0.9);
-            border-radius: 12px;
-            border: 1px solid rgba(0,0,0,0.08);
-            padding: 12px 14px;
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: 10px;
-            box-shadow: 0 10px 24px rgba(0,0,0,0.12);
-        }
-        #upload-panel input[type="file"] {
-            flex: 1;
-            min-width: 220px;
-        }
-        #song-upload-button {
-            border: none;
-            background: #2f7bff;
-            color: #fff;
-            padding: 8px 14px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 14px;
-        }
-        #song-upload-button:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-        #song-upload-status {
-            font-size: 13px;
-            color: #333;
-        }
     </style>
 </head>
 <body>
     <h1>精选诗歌</h1>
-    <div id="upload-panel">
-        <input id="song-upload-input" type="file" accept="image/*" multiple>
-        <button id="song-upload-button">上传歌谱图片</button>
-        <span id="song-upload-status"></span>
-    </div>
 """
 
     song_counter = 1
@@ -1108,9 +1071,6 @@ def generate_html_index(directory, output_file):
             const addToPresentationLinks = document.querySelectorAll('.add-to-presentation');
             const storageKey = 'presentationList';
             let presentationList = JSON.parse(localStorage.getItem(storageKey)) || [];
-            const uploadInput = document.getElementById('song-upload-input');
-            const uploadButton = document.getElementById('song-upload-button');
-            const uploadStatus = document.getElementById('song-upload-status');
 
             // 面板元素
             const panel = document.getElementById('presentation-panel');
@@ -1141,42 +1101,6 @@ def generate_html_index(directory, output_file):
             }
 
             addToPresentationLinks.forEach(updateLinkState);
-
-            function setUploadStatus(text, isError) {
-                if (!uploadStatus) return;
-                uploadStatus.textContent = text;
-                uploadStatus.style.color = isError ? '#c00' : '#333';
-            }
-
-            if (uploadButton && uploadInput) {
-                uploadButton.addEventListener('click', async () => {
-                    const files = uploadInput.files ? Array.from(uploadInput.files) : [];
-                    if (files.length === 0) {
-                        setUploadStatus('请选择要上传的图片', true);
-                        return;
-                    }
-                    uploadButton.disabled = true;
-                    setUploadStatus('上传中…', false);
-                    try {
-                        for (const file of files) {
-                            const form = new FormData();
-                            form.append('file', file);
-                            const resp = await fetch('/upload', { method: 'POST', body: form });
-                            if (!resp.ok) {
-                                throw new Error(`上传失败：${resp.status}`);
-                            }
-                        }
-                        setUploadStatus('上传完成，正在刷新…', false);
-                        setTimeout(() => {
-                            window.location.reload();
-                        }, 600);
-                    } catch (e) {
-                        setUploadStatus(e?.message || '上传失败', true);
-                    } finally {
-                        uploadButton.disabled = false;
-                    }
-                });
-            }
 
             function renderPanelList() {
                 panelItems.innerHTML = '';
@@ -1380,7 +1304,7 @@ def generate_html_index(directory, output_file):
 
 if __name__ == '__main__':
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    default_song_dir = os.path.join(script_dir, '灵栖清泉曲谱')
+    default_song_dir = os.path.join(script_dir, 'songs')
 
     parser = argparse.ArgumentParser(description='Generate HTML index and presentation pages.')
     parser.add_argument('--song-dir', dest='song_dir', default=default_song_dir,

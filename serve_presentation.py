@@ -9,8 +9,8 @@ from generate_html_index import generate_html_index
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 PARAMS_FILENAME = 'presentation_params.json'
 PARAMS_PATH = os.path.join(ROOT_DIR, PARAMS_FILENAME)
-DEFAULT_SONG_DIR = os.path.join(ROOT_DIR, '灵栖清泉曲谱')
-UPLOAD_DIR = DEFAULT_SONG_DIR if os.path.isdir(DEFAULT_SONG_DIR) else os.path.join(ROOT_DIR, 'uploads')
+DEFAULT_SONG_DIR = os.path.join(ROOT_DIR, 'songs')
+UPLOAD_DIR = DEFAULT_SONG_DIR
 
 
 def merge_params(existing: dict, incoming: dict) -> dict:
